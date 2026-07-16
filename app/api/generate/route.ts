@@ -45,7 +45,7 @@ const researchSchema = z.object({
   keyInsights: z.array(z.string()).min(2).max(8),
   recommendations: z.array(z.string()).min(2).max(6),
   caveats: z.array(z.string()),
-  sources: z.array(z.object({ title: z.string(), publisher: z.string(), date: z.string(), url: z.string().url(), relevance: z.string() })).max(8),
+  sources: z.array(z.object({ title: z.string(), publisher: z.string(), date: z.string(), url: z.string().describe('A complete public HTTPS article URL'), relevance: z.string() })).max(8),
 })
 
 function assertPublicUrls(value: string) {
@@ -90,7 +90,18 @@ export async function POST(request: Request) {
       system: 'You are a careful research analyst. Simplify complex information, distinguish evidence from analysis, flag uncertainty and conflicting claims, and never fabricate citations. For topic research, find relevant current public articles and include only verified source URLs. For supplied content, use only supplied evidence unless clearly labeled.',
       prompt: `${input.mode === 'Topic' ? 'Research this topic using current web articles' : input.mode === 'URLs' ? 'Read and summarize these public sources' : 'Summarize this supplied content'} with a plain-language executive summary, key insights, recommendations, caveats, and sources when available:\n\n${input.query}`,
     })
-    return Response.json(output)
+
+    const validatedOutput = {
+      ...output,
+      sources: output.sources.filter((source) => {
+        try {
+          return new URL(source.url).protocol === 'https:'
+        } catch {
+          return false
+        }
+      }),
+    }
+    return Response.json(validatedOutput)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'The request could not be completed.'
     return Response.json({ error: message }, { status: 400 })
